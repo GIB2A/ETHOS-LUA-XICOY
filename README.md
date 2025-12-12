@@ -47,4 +47,5 @@ Use **GitHub Issues** (Bug / Feature request). Please include:
 ## License
 MIT — see `LICENSE`.
 
+# Disclaimer – Limitation of Liability (GIB2A)
 See DISCLAIMER.md for warranty and liability limitations.
