@@ -56,5 +56,6 @@ Use GitHub Issues (Bug / Feature request). Please include:
 License
 
 MIT — see LICENSE.
+
 Disclaimer
 See DISCLAIMER.md for warranty and liability limitations.
