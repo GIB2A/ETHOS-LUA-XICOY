@@ -1,15 +1,15 @@
--- GIB2A - Xicoy ProHub graphical widget (ETHOS 1.7)
--- Xicoy telemetry + configuration menu
--- Real values (RPM, EGT, Pump, Fuel)
--- Red zones: EGT > 700°C, RPM > 100% up to 110%
--- White text, title + subtitle + signature
+-- GIB2A - Xicoy ProHub graphique (ETHOS 1.7)
+-- Télémétrie Xicoy + menu de configuration
+-- Valeurs réelles (RPM, EGT, Pump, Fuel)
+-- Zones rouges : EGT > 700°C, RPM > 100% jusqu'à 110%
+-- Texte en blanc, titre + sous-titre + signature
 
 ---@diagnostic disable: undefined-global
 
 local audioPath = system.getAudioVoice() or "/audio"
 
 -------------------------------------------------------------
--- Widget creation / update
+-- Création / mise à jour du widget
 -------------------------------------------------------------
 
 local function create(zone, options)
@@ -20,22 +20,22 @@ local function create(zone, options)
         -- Chrono (timer ETHOS ou autre source temps)
         chronoSource   = nil, chronoValue   = nil,
 
-        -- Xicoy / ETHOS sensors
+        -- Capteurs Xicoy / ETHOS
         rpmSource      = nil, rpmValue      = nil,   -- RPM Sensor
         temp1Source    = nil, temp1Value    = nil,   -- Temp 1 (EGT)
         temp2Source    = nil, temp2Value    = nil,   -- Temp 2 (Status code)
         adc3Source     = nil, adc3Value     = nil,   -- ADC3 (ECU V)
         adc4Source     = nil, adc4Value     = nil,   -- ADC4 (Pump command / volt)
 
-        fuelSource               = nil, fuelValue             = nil,   -- Fuel remaining (real value)
-        fuelAlertPercent         = 30,                        -- Alarm threshold (% remaining)
-        fuelCriticalAlertPercent = 5,                         -- Critical alarm threshold (% remaining)
-        fuelAlertFile            = nil,                       -- Fuel alarm sound (threshold)
-        fuelCriticalAlertFile    = nil,                       -- Fuel critical alarm sound
-        _fuelPercent             = nil,                       -- internal %% value (computed)
+        fuelSource               = nil, fuelValue             = nil,   -- Fuel remaining (valeur réelle)
+        fuelAlertPercent         = 30,                        -- Seuil alarme (% restant)
+        fuelCriticalAlertPercent = 5,                         -- Seuil alarme critique (% restant)
+        fuelAlertFile            = nil,                       -- Son alarme fuel (seuil)
+        fuelCriticalAlertFile    = nil,                       -- Son alarme fuel critique
+        _fuelPercent             = nil,                       -- valeur interne %% (calculée)
         fuelMax                  = 100,                       -- Basic : 100%% = plein (Xicoy Fuel %)
 
-        -- Xicoy DIY / free sensors
+        -- DIY Xicoy / capteurs libres
         diy1Source     = nil, diy1Value     = nil,   -- DIY1 (optionnel)
         diy2Source     = nil, diy2Value     = nil,   -- DIY2
         diy3Source     = nil, diy3Value     = nil,   -- DIY3
@@ -50,24 +50,24 @@ local function create(zone, options)
         engineTimeSource   = nil, engineTimeValue   = nil,   -- Engine Time (s)
         pumpAmpSource      = nil, pumpAmpValue      = nil,   -- Pump Amperage (0.1A)
 
-        -- General sensor (RxBatt)
+        -- Capteur général (RxBatt)
         rxbattSource   = nil, rxbattValue   = nil,   -- RxBatt Sensor
 
         -- RSSI
         rssi1Source    = nil, rssi1Value    = nil,   -- RSSI Sensor 1 (2.4G)
         rssi2Source    = nil, rssi2Value    = nil,   -- RSSI Sensor 2 (900M)
 
-        -- Gauge max scales (real values)
+        -- Échelles max pour les jauges (valeurs réelles)
         rpmMax         = 160000,                     -- RPM max turbine (100%%)
         egtMax         = 900,                        -- EGT max (°C)
-        pumpMax        = 100,                        -- Pump max value
+        pumpMax        = 100,                        -- Valeur max Pump
         telemetryMode  = 0,                          -- 0=Basic, 1=Advanced/Expert (ProHub Extended)
         theme          = 0,                          -- 0=Std, 1=High contrast, 2=Amber
     }
 end
 
 -------------------------------------------------------------
--- Xicoy ECU message table (codes 0 to 36)
+-- Table des messages ECU Xicoy (codes 0 à 36)
 -------------------------------------------------------------
 
 local msg_table_Xicoy = {
@@ -122,20 +122,34 @@ end
 -------------------------------------------------------------
 
 local function readSourceValue(src)
-    if src and type(src.value) == "function" then
-        return src:value()
+    if not src then
+        return nil
+    end
+
+    local realSrc = src
+    if type(src.name) == "function" then
+        local n = src:name()
+        if n and n ~= "" then
+            local s2 = system.getSource(n)
+            if s2 then
+                realSrc = s2
+            end
+        end
+    end
+
+    if type(realSrc.value) == "function" then
+        return realSrc:value()
     end
     return nil
 end
 
 -------------------------------------------------------------
-
--- Fuel: percentage calculation + alarm based on a real value
+-- Fuel : calcul du pourcentage + alarme à partir d'une valeur réelle
 -------------------------------------------------------------
 
 local function updateFuel(widget)
-    -- Xicoy Basic mode: fuelValue is already a percentage (0..100)
-    local value       = widget.fuelValue     -- Xicoy % value
+    -- Mode Basic Xicoy : fuelValue est déjà un pourcentage (0..100)
+    local value       = widget.fuelValue     -- valeur % Xicoy
     local prevPercent = widget._fuelPercent
     local percent     = nil
 
@@ -153,7 +167,7 @@ local function updateFuel(widget)
     local alert    = widget.fuelAlertPercent or 0
     local critical = widget.fuelCriticalAlertPercent or 0
 
-    -- Critical alarm: very low fuel (critical threshold)
+    -- Alarme critique : fuel très bas (seuil critique)
     if percent and critical > 0 and percent <= critical then
         if (prevPercent == nil) or (prevPercent > critical) then
             if system.playHaptic then
@@ -173,10 +187,10 @@ local function updateFuel(widget)
         return
     end
 
-    -- Fuel threshold alarm (non-critical)
+    -- Alarme seuil fuel (non critique)
     if percent and alert > 0 and percent <= alert then
         if (prevPercent == nil) or (prevPercent > alert) then
-            -- Alarm: vibration + sound + spoken remaining-percent callout
+            -- Alarme : vibration + son + annonce vocale du pourcentage restant
             if system.playHaptic then
                 system.playHaptic(300)
             end
@@ -196,15 +210,15 @@ end
 
 
 -------------------------------------------------------------
--- Graphics helpers
+-- Helpers graphiques
 -------------------------------------------------------------
 
 local function getMainColor()
-    -- FIXED primary color: green, independent of the ETHOS theme
+    -- Couleur principale FIXE : vert, indépendamment du thème ETHOS
     if lcd.RGB then
         return lcd.RGB(0, 160, 0)
     end
-    -- B&W screens: keep a non-zero value (light gray)
+    -- Écrans N&B : on reste sur une valeur non nulle (gris clair)
     if lcd.GREY then
         return lcd.GREY(10)
     end
@@ -229,11 +243,11 @@ local function getAlertColor()
 end
 
 
--- Theme-based color palette
+-- Palette de couleurs selon le thème
 local function getPalette(theme)
     if theme == nil then theme = 0 end
 
-    -- B&W screen: ignore the theme and keep it simple
+    -- Écran N&B : on ignore le thème et on reste simple
     if lcd.GREY and not lcd.RGB then
         return {
             bgColor      = getGrey(0),
@@ -244,7 +258,7 @@ local function getPalette(theme)
         }
     end
 
-    -- Theme 0: Corsica Fly Dream green
+    -- Thème 0 : vert Corsica Fly Dream
     if theme == 0 then
         return {
             bgColor      = lcd.RGB(0, 0, 0),
@@ -255,7 +269,7 @@ local function getPalette(theme)
         }
     end
 
-    -- Theme 1: High contrast (cyan / blue)
+    -- Thème 1 : High contrast (cyan / bleu)
     if theme == 1 then
         return {
             bgColor      = lcd.RGB(0, 0, 0),
@@ -266,7 +280,7 @@ local function getPalette(theme)
         }
     end
 
-    -- Theme 2: Amber (cockpit)
+    -- Thème 2 : Amber (cockpit)
     if theme == 2 then
         return {
             bgColor      = lcd.RGB(0, 0, 0),
@@ -287,7 +301,7 @@ local function getPalette(theme)
     }
 end
 
--- Simple gauge (background + single color)
+-- Jauge simple (fond + une seule couleur)
 local function drawArcGauge(cx, cy, innerR, outerR, startAngle, endAngle, percent, colorActive, colorBg)
     if percent == nil then percent = 0 end
     if percent < 0 then percent = 0 elseif percent > 100 then percent = 100 end
@@ -309,12 +323,12 @@ local function drawArcGauge(cx, cy, innerR, outerR, startAngle, endAngle, percen
     lcd.drawAnnulusSector(cx, cy, innerR, outerR, startAngle, activeEnd)
 end
 
--- Gauge with alert band: lower part in colorNormal,
--- above bandStartPercent in colorAlert.
+-- Jauge avec bande d'alerte : partie basse en colorNormal,
+-- au-delà de bandStartPercent en colorAlert.
 local function drawArcGaugeBand(cx, cy, innerR, outerR, startAngle, endAngle,
                                 percent, bandStartPercent, colorNormal, colorAlert, colorBg)
     if percent == nil then percent = 0 end
-    if percent < 0 then percent = 0 elseif percent > 110 then percent = 110 end  -- RPM can reach 110%
+    if percent < 0 then percent = 0 elseif percent > 110 then percent = 110 end  -- RPM peut aller à 110%
     if bandStartPercent == nil then bandStartPercent = 101 end
 
     if lcd.drawAnnulusSector == nil then
@@ -349,12 +363,12 @@ local function drawArcGaugeBand(cx, cy, innerR, outerR, startAngle, endAngle,
 end
 
 -------------------------------------------------------------
--- Display: GRAF layout with real values
+-- Affichage : mise en page GRAF avec valeurs réelles
 -------------------------------------------------------------
 
 
 -------------------------------------------------------------
--- Dashboard: first "objects" step inspired by DashX
+-- Dashboard : première étape "objects" inspirée DashX
 -- (pour l'instant : RPM, EGT, Pump Volt, Fuel)
 -------------------------------------------------------------
 
@@ -365,27 +379,27 @@ local dashboardObjects = {
     { id = "pump", kind = "arc",     label = "PUMP" },
 }
 
--- Gauge rendering is defined by dashboardObjects.
--- ctx contains: w, h, margin, colors, geometry (cxRight, etc.) and values (rpmPercent, text...)
+-- Rendu des jauges défini par dashboardObjects.
+-- ctx contient : w, h, margin, couleurs, géométrie (cxRight, etc.) et valeurs (rpmPercent, texte...)
 local function renderDashboard(widget, ctx)
     for _, o in ipairs(dashboardObjects) do
         if o.id == "rpm" and o.kind == "arcBand" then
-            -- RPM: top-right semi-gauge
+            -- RPM : demi-jauge haut droite
             drawArcGaugeBand(
                 ctx.cxRight, ctx.cyTop,
                 ctx.innerBig, ctx.radiusBig,
                 270, 450,
                 ctx.rpmPercent or 0,
-                100, -- red band starting at 100%
+                100, -- bande rouge à partir de 100 %
                 ctx.gaugeColor, ctx.alertColor, ctx.bgGaugeColor
             )
 
-            -- Real value + label
+            -- Valeur réelle + label
             local rpmText = ctx.rpmText or "--"
             lcd.color(ctx.gaugeColor)
             lcd.font(FONT_XXL)
             local tw, th = lcd.getTextSize(rpmText)
-            local rpmValueY = ctx.cyTop - th - 27  -- adjusted for vertical consistency
+            local rpmValueY = ctx.cyTop - th - 27  -- ajusté pour cohérence verticale
             lcd.drawText(ctx.cxRight - tw / 2, rpmValueY, rpmText, 0)
 
             lcd.color(ctx.textColor)
@@ -396,7 +410,7 @@ local function renderDashboard(widget, ctx)
             lcd.drawText(ctx.cxRight - lw / 2, rpmLabelY, label, 0)
 
         elseif o.id == "egt" and o.kind == "arcBand" then
-            -- EGT: bottom-right semi-gauge
+            -- EGT : demi-jauge bas droite
             local percent = ctx.egtPercent or 0
             local bandStart = ctx.egtBandStartPercent or 101
 
@@ -413,7 +427,7 @@ local function renderDashboard(widget, ctx)
             lcd.color(ctx.gaugeColor)
             lcd.font(FONT_XXL)
             local tw, th = lcd.getTextSize(egtText)
-            local egtValueY = ctx.cyBottom - th - 27  -- adjusted for vertical consistency
+            local egtValueY = ctx.cyBottom - th - 27  -- ajusté pour cohérence verticale
             lcd.drawText(ctx.cxRight - tw / 2, egtValueY, egtText, 0)
 
             lcd.color(ctx.textColor)
@@ -425,7 +439,7 @@ local function renderDashboard(widget, ctx)
 
 
         elseif o.id == "pump" and o.kind == "arc" then
-            -- PUMP: left ring
+            -- PUMP : anneau à gauche
             local innerR = ctx.radiusSmall - ctx.thicknessSmall
             local outerR = ctx.radiusSmall
             local percent = ctx.pumpPercent or 0
@@ -438,7 +452,7 @@ local function renderDashboard(widget, ctx)
                 ctx.gaugeColor, ctx.bgGaugeColor
             )
 
-            -- center value
+            -- valeur au centre
             local pumpText = ctx.pumpText or "--"
             lcd.color(ctx.gaugeColor)
             lcd.font(FONT_L)
@@ -446,7 +460,7 @@ local function renderDashboard(widget, ctx)
             local valueY = ctx.cyLeft - th
             lcd.drawText(ctx.cxLeft - tw / 2, valueY, pumpText, 0)
 
-            -- the "PUMP" label under the value, inside the circle
+            -- label "PUMP" sous la valeur, à l'intérieur du cercle
             lcd.color(ctx.textColor)
             lcd.font(FONT_STD)
             local label = o.label or "PUMP"
@@ -459,7 +473,7 @@ local function renderDashboard(widget, ctx)
             )
 
         elseif o.id == "fuel" and o.kind == "bar" then
-            -- Fuel gauge (bottom bar, auto-scale)
+            -- Jauge carburant (barre en bas, auto-scale)
             -- On tient compte de la hauteur et de la largeur du widget
             local baseH, baseW = 272, 480
             local scaleH       = ctx.h / baseH
@@ -498,7 +512,7 @@ local function renderDashboard(widget, ctx)
                 lcd.drawFilledRectangle(fuelBarX, fuelBarY, fuelFillW, fuelBarHeight)
             end
 
-            -- Centered real-value text
+            -- Texte valeur réelle centré
             local fuelText = ctx.fuelText or "--"
             lcd.color(ctx.gaugeColor)
             lcd.font(FONT_STD)
@@ -515,7 +529,7 @@ end
 local function paint(widget)
     local w, h = lcd.getWindowSize()
 
-    -- Theme-based color palette
+    -- Palette de couleurs selon le thème
     local palette      = getPalette(widget.theme or 0)
     local gaugeColor   = palette.gaugeColor
     local alertColor   = palette.alertColor
@@ -528,7 +542,7 @@ local function paint(widget)
     local margin       = 8
 
     --------------------------------------------------------
-    -- Telemetry data conversion
+    -- Conversion des données télémétrie
     --------------------------------------------------------
 
     -- Chrono (secondes -> mm:ss)
@@ -560,14 +574,14 @@ local function paint(widget)
         return x
     end
 
-    -- Real values
+    -- Valeurs réelles
     local rpmValue  = (type(widget.rpmValue)   == "number") and widget.rpmValue   or nil
     local egtValue  = (type(widget.temp1Value) == "number") and widget.temp1Value or nil
     local pumpValue = (type(widget.adc4Value)  == "number") and widget.adc4Value  or nil
     local fuelValue = (type(widget.fuelValue)  == "number") and widget.fuelValue  or nil
 
-    -- RPM: red zone >100% up to 110%
-    -- Safeguard rpmMax: if the value is invalid (nil or <= 0), fall back to 160000 by default
+    -- RPM : zone rouge >100% jusqu'à 110%
+    -- Sécuriser rpmMax : si valeur absurde (nil ou <= 0), on repasse à 160000 par défaut
     local rpmMax = widget.rpmMax or 160000
     if rpmMax <= 0 then
         rpmMax = 160000
@@ -586,11 +600,11 @@ local function paint(widget)
         end
     end
 
-    -- EGT: real value in °C, 0..100%% scale from 0 to egtMax, red band above ~700°C
+    -- EGT : valeur réelle en °C, échelle 0..100%% de 0 à egtMax, bande rouge > ~700°C
     local egtPercent = nil
     local egtBandStartPercent = nil
 
-    -- Safeguard egtMax: if the value is invalid (nil or too low), fall back to 900°C by default
+    -- Sécuriser egtMax : si valeur absurde (nil ou trop basse), on repasse à 900°C par défaut
     local egtMax = widget.egtMax or 900
     if egtMax < 200 then
         egtMax = 900
@@ -619,7 +633,7 @@ local function paint(widget)
     local pumpPercent = clamp01(mapToPercentRaw(pumpValue, widget.pumpMax or 0))
     local fuelPercent = clamp01(widget._fuelPercent)
 
-    -- Displayed text = REAL VALUES (no %)
+    -- Texte affiché = VALEURS RÉELLES (sans %)
     local rpmText  = rpmValue  and string.format("%d", math.floor(rpmValue + 0.5))   or "--"
     local egtText  = egtValue  and string.format("%d", math.floor(egtValue + 0.5))   or "--"
     local pumpText = pumpValue and string.format("%d", math.floor(pumpValue + 0.5))  or "--"
@@ -666,7 +680,7 @@ local function paint(widget)
         end
     end
 
-    -- DIY1 / DIY2 / DIY3 text (shown in the left column)
+    -- DIY1 / DIY2 / DIY3 texte (affichés dans la colonne de gauche)
     local diy1Label, diy1Text = nil, nil
     if widget.diy1Source then
         diy1Label = "DIY1 "
@@ -698,7 +712,7 @@ local function paint(widget)
     end
 
     --------------------------------------------------------
-    -- GENERAL GEOMETRY
+    -- GÉOMÉTRIE GÉNÉRALE
     --------------------------------------------------------
     local cxRight   = math.floor(w * 0.70)
     local offsetY   = 30
@@ -707,14 +721,14 @@ local function paint(widget)
     local cyTopBase = h * 0.38 + offsetY
     local cyTop     = math.floor(cyTopBase - 15)
 
-    -- EGT: lower arc (raised by 10 px)
+    -- EGT : arc bas (remontée de 10 px)
     local cyBottom  = math.floor(h * 0.78 + offsetY - 10)
 
     local radiusBig      = math.floor(math.min(w, h) * 0.38)
     local thicknessBig   = math.floor(radiusBig * 0.075)
     local innerBig       = radiusBig - thicknessBig
 
-    -- Pump Volt: moved down by 30 px and shifted 20 px to the right
+    -- Pump Volt : descendue de 30 px et décalée de 20 px vers la droite
     local cxLeft         = math.floor(w * 0.24 + 20)
     local cyLeft         = math.floor(h * 0.45 + 30)
     local radiusSmall    = math.floor(math.min(w, h) * 0.22)
@@ -723,7 +737,7 @@ local function paint(widget)
     --------------------------------------------------------
     -- 0) Signature en haut
     --------------------------------------------------------
-    -- Signature in green (GIB2A color)
+    -- Signature en vert (couleur GIB2A)
     lcd.color(gaugeColor)
     lcd.font(FONT_STD)
     local sig = "Gib2a"
@@ -756,7 +770,7 @@ local function paint(widget)
     local statusLine = statusLabel .. statusText
     local lw, lh = lcd.getTextSize(statusLine)
 
-    -- White label, green status value
+    -- Label en blanc, valeur de statut en vert
     lcd.color(textColor)
     lcd.drawText(statusX, statusY, statusLabel, 0)
 
@@ -836,7 +850,7 @@ local function paint(widget)
     --------------------------------------------------------
 
     --------------------------------------------------------
-    -- 4–7) Main gauges via dashboardObjects (first iteration)
+    -- 4–7) Jauges principales via dashboardObjects (premier essai)
 
  --------------------------------------------------------
     local ctx = {
@@ -848,7 +862,7 @@ local function paint(widget)
         bgGaugeColor = bgGaugeColor,
         textColor    = textColor,
 
-        -- geometry
+        -- géométrie
         cxRight       = cxRight,
         cyTop         = cyTop,
         cyBottom      = cyBottom,
@@ -859,7 +873,7 @@ local function paint(widget)
         radiusSmall   = radiusSmall,
         thicknessSmall = thicknessSmall,
 
-        -- values
+        -- valeurs
         rpmPercent   = rpmPercent,
         rpmText      = rpmText,
         egtPercent   = egtPercent,
@@ -876,7 +890,7 @@ end
 
 
 -------------------------------------------------------------
--- Configuration (select ETHOS sources + scales)
+-- Configuration (sélection des sources ETHOS + échelles)
 -------------------------------------------------------------
 
 local function buildConfig(widget)
@@ -915,7 +929,7 @@ local function buildConfig(widget)
         function() return widget.rpmSource end,
         function(v) widget.rpmSource = v end)
 
-    -- RPM max (real value for 100%)
+    -- RPM max (valeur réelle pour 100%)
     line = form.addLine("RPM Max (100%)")
     local rpmField = form.addNumberField(line, nil, 1, 500000,
         function() return widget.rpmMax or 160000 end,
@@ -933,7 +947,7 @@ local function buildConfig(widget)
         function() return widget.temp1Source end,
         function(v) widget.temp1Source = v end)
 
-    -- EGT max (real value for 100%)
+    -- EGT max (valeur réelle pour 100%)
     line = form.addLine("EGT Max (100%)")
     local egtField = form.addNumberField(line, nil, 100, 1500,
         function() return widget.egtMax or 900 end,
@@ -952,13 +966,13 @@ local function buildConfig(widget)
         function() return widget.adc3Source end,
         function(v) widget.adc3Source = v end)
 
-    -- ADC4 Sensor (Pump real value)
+    -- ADC4 Sensor (Pump valeur réelle)
     line = form.addLine("ADC4 Sensor (Pump)")
     form.addSourceField(line, nil,
         function() return widget.adc4Source end,
         function(v) widget.adc4Source = v end)
 
-    -- Pump max (real value for 100%)
+    -- Pump max (valeur réelle pour 100%)
     line = form.addLine("Pump Max (100%)")
     local pumpField = form.addNumberField(line, nil, 1, 1000,
         function() return widget.pumpMax or 100 end,
@@ -967,13 +981,13 @@ local function buildConfig(widget)
         pumpField:step(1)
     end
 
-    -- Fuel remaining (real value)
+    -- Fuel remaining (valeur réelle)
     line = form.addLine("Fuel Sensor (Real)")
     form.addSourceField(line, nil,
         function() return widget.fuelSource end,
         function(v) widget.fuelSource = v end)
 
-    -- Fuel max (real value)
+    -- Fuel max (valeur réelle)
     line = form.addLine("Fuel Max (Full)")
     local fuelMaxField = form.addNumberField(line, nil, 1, 50000,
         function() return widget.fuelMax or 100 end,
@@ -1012,14 +1026,14 @@ local function buildConfig(widget)
         function() return widget.fuelAlertFile end,
         function(v) widget.fuelAlertFile = v end)
 
-    -- Fuel critical alert sound (0% / very low)
+    -- Fuel critical alert sound (0% / très bas)
     line = form.addLine("Fuel Critical Sound")
     form.addFileField(line, nil, audioPath, "audio +ext",
         function() return widget.fuelCriticalAlertFile end,
         function(v) widget.fuelCriticalAlertFile = v end)
 
 
-    -- Extended / Expert: ProHub Extended / Maximum telemetry
+    -- Extended / Expert : télémétrie ProHub Extended / Maximum
     local mode = widget.telemetryMode or 0
     if mode == 1 then
             -- ProHub Extended / Maximum telemetry (optionnel)
@@ -1070,7 +1084,7 @@ local function buildConfig(widget)
     form.addSourceField(line, nil,
         function() return widget.diy1Source end,
         function(v)
-            -- If no sensor is selected (---) or the source has no name, assume there is no DIY1.
+            -- Si aucun capteur sélectionné (---) ou source sans nom, on considère qu'il n'y a pas de DIY1.
             if v == nil then
                 widget.diy1Source = nil
                 return
@@ -1089,7 +1103,7 @@ local function buildConfig(widget)
     form.addSourceField(line, nil,
         function() return widget.diy2Source end,
         function(v)
-            -- If no sensor is selected (---) or the source has no name, assume there is no DIY2.
+            -- Si aucun capteur sélectionné (---) ou source sans nom, on considère qu'il n'y a pas de DIY2.
             if v == nil then
                 widget.diy2Source = nil
                 return
@@ -1108,7 +1122,7 @@ local function buildConfig(widget)
     form.addSourceField(line, nil,
         function() return widget.diy3Source end,
         function(v)
-            -- If no sensor is selected (---) or the source has no name, assume there is no DIY3.
+            -- Si aucun capteur sélectionné (---) ou source sans nom, on considère qu'il n'y a pas de DIY3.
             if v == nil then
                 widget.diy3Source = nil
                 return
@@ -1123,7 +1137,7 @@ local function buildConfig(widget)
             widget.diy3Source = v
         end)
 
-    -- General sensor (RxBatt)
+    -- Capteur général (RxBatt)
     line = form.addLine("RxBatt Sensor")
     form.addSourceField(line, nil,
         function() return widget.rxbattSource end,
@@ -1147,7 +1161,7 @@ local function buildConfig(widget)
         function(v) widget.chronoSource = v end)
 
 
-    -- Display theme
+    -- Thème d'affichage
     line = form.addLine("Theme (0=Std 1=High 2=Amber)")
     local themeField = form.addNumberField(line, nil, 0, 2,
         function() return widget.theme or 0 end,
@@ -1206,13 +1220,13 @@ local function wakeup(widget)
     updateField("engineTimeSource",   "engineTimeValue")
     updateField("pumpAmpSource",      "pumpAmpValue")
 
-    -- General sensors
+    -- Capteurs généraux
     updateField("rxbattSource",   "rxbattValue")
 
     updateField("rssi1Source",    "rssi1Value")
     updateField("rssi2Source",    "rssi2Value")
 
-    -- Fuel (real value)
+    -- Fuel (valeur réelle)
     updateField("fuelSource",     "fuelValue")
     updateFuel(widget)
 
@@ -1224,11 +1238,11 @@ local function wakeup(widget)
 end
 
 local function update(widget)
-    -- All real-time logic is already handled in wakeup()
+    -- Toute la logique temps réel est déjà gérée dans wakeup()
 end
 
 local function backgroundProcessWidget(widgetToProcessInBackground)
-    -- nothing to do in background task
+    -- rien à faire en tâche de fond
 end
 
 -------------------------------------------------------------
@@ -1295,7 +1309,7 @@ local function read(widget)
 
     local fuelMax = storage.read("fuelMax")
     if fuelMax ~= nil then widget.fuelMax = fuelMax end
-    -- For the current Basic mode, force fuelMax to a 0..100 scale
+    -- Pour le mode Basic actuel, on force fuelMax dans une échelle 0..100
     if not widget.fuelMax or widget.fuelMax > 100 then
         widget.fuelMax = 100
     end
@@ -1356,7 +1370,7 @@ end
 local function init()
     system.registerWidget({
         key        = "GIB2A",
-        name       = "GIB2A - Xicoy ProHub graphical widget (ETHOS 1.7)",
+        name       = "GIB2A - Xicoy ProHub graphique (ETHOS 1.7)",
         create     = create,
         update     = update,
         wakeup     = wakeup,
