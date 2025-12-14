@@ -1231,10 +1231,10 @@ local function wakeup(widget)
     updateFuel(widget)
 
     if dirty then
-        if (not lcd.hasFocus) or lcd.hasFocus() then
-            lcd.invalidate()
-        end
+    if (not lcd.isVisible) or lcd.isVisible() then
+        lcd.invalidate()
     end
+end
 end
 
 local function update(widget)
